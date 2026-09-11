@@ -1,0 +1,105 @@
+{
+    "name": "ReVu Clanregeln – HugoSMP",
+    "regeln": {
+        "1": {
+            "titel": "Allgemeines Verhalten",
+            "punkte": [
+                "Respektvoller Umgang mit allen Clanmitgliedern und anderen Spielern.",
+                "Beleidigungen, Provokationen, unnötiges Trollen und toxisches Verhalten sind zu vermeiden.",
+                "Entscheidungen der Clanleitung sind zu respektieren.",
+                "Interne Informationen, Strategien oder private Gespräche dürfen nicht ohne Erlaubnis weitergegeben werden.",
+                "Jeder repräsentiert mit seinem Verhalten den gesamten Clan."
+            ]
+        },
+        "2": {
+            "titel": "Scamming & Betrug",
+            "punkte": [
+                "Scamming innerhalb des Clans ist strengstens verboten.",
+                "Clanmitglieder dürfen andere Mitglieder nicht um Items, Geld oder sonstige Wertgegenstände betrügen.",
+                "Abmachungen zwischen Clanmitgliedern sind einzuhalten.",
+                "Bewusstes Ausnutzen von Vertrauen oder Unwissenheit eines anderen Mitglieds wird ebenfalls als Scamming gewertet.",
+                "Wer ein Clanmitglied betrügt, muss mit einer Clanstrafe rechnen."
+            ]
+        },
+        "3": {
+            "titel": "Fights in der Clanbase",
+            "punkte": [
+                "Fights innerhalb der Clanbase sind ohne Zustimmung der betroffenen Personen verboten.",
+                "Keine unnötigen PvP-Kämpfe, Duelle oder Schlägereien in der Clanbase.",
+                "Wer absichtlich einen Fight startet und dadurch Items eines Mitglieds verloren gehen, trägt die Verantwortung für den entstandenen Verlust.",
+                "Bei einem Fight müssen verlorene Items bzw. der entstandene Schaden dem Geschädigten vollständig rückerstattet werden.",
+                "Können die verlorenen Items nicht zurückgegeben werden, muss der entsprechende Wert ersetzt werden."
+            ]
+        },
+        "4": {
+            "titel": "Griefing & Zerstörung",
+            "punkte": [
+                "Griefing von Clanbasen ist verboten.",
+                "Gebäude, Farmen, Kisten, Redstone-Anlagen oder sonstiges Eigentum anderer Clanmitglieder dürfen nicht ohne Erlaubnis zerstört oder verändert werden.",
+                "Das Entnehmen oder Verschieben von Items aus fremden Kisten ohne Erlaubnis ist verboten.",
+                "Absichtliches Beschädigen oder Zerstören von Clan-Eigentum wird entsprechend bestraft.",
+                "Entstandener Schaden muss vom Verursacher vollständig behoben bzw. ersetzt werden."
+            ]
+        },
+        "5": {
+            "titel": "Umgang mit Items",
+            "punkte": [
+                "Fremde Items dürfen nicht ohne Erlaubnis genommen werden.",
+                "Gefundene Items aus der Clanbase sind dem Besitzer zurückzugeben, sofern dieser bekannt ist.",
+                "Bei gemeinsam genutzten Kisten ist darauf zu achten, dass nur die dafür vorgesehenen Items entnommen werden.",
+                "Wer durch eigenes Verschulden Items eines Clanmitglieds verliert, muss diese ersetzen."
+            ]
+        },
+        "6": {
+            "titel": "Verwarnungs- & Strafsystem",
+            "punkte": [
+                "Bei einem Verstoß erfolgt grundsätzlich zunächst eine Verwarnung.",
+                "Bei einem weiteren Verstoß kann eine vorher festgelegte Geld- oder Itemstrafe verlangt werden.",
+                "Schwere Verstöße wie absichtliches Scamming, massives Griefing, wiederholtes Klauen oder bewusstes Schädigen des Clans können unabhängig von der Anzahl der Verwarnungen direkt zu einer höheren Strafe oder zum Clanausschluss führen.",
+                "Die Höhe der Strafe wird von der Clanleitung abhängig von der Schwere des Verstoßes festgelegt."
+            ]
+        },
+        "7": {
+            "titel": "Ingame-Regeln",
+            "punkte": [
+                "Die allgemeinen HugoSMP-Regeln müssen jederzeit eingehalten werden.",
+                "Keine Cheats, Hacks, Exploits oder sonstige unerlaubte Vorteile.",
+                "Keine absichtliche Ausnutzung von Bugs oder Exploits.",
+                "Kein absichtliches Schädigen des Servers oder anderer Spieler.",
+                "Bei Unsicherheit über eine Situation sollte zuerst ein Mitglied der Clanleitung gefragt werden."
+            ]
+        },
+        "8": {
+            "titel": "Discord-Regeln",
+            "punkte": [
+                "Respektvoller Umgang miteinander.",
+                "Kein Spam oder unnötiges Pingen.",
+                "Keine NSFW-, extremistischen oder anderweitig unangemessenen Inhalte.",
+                "Keine Werbung ohne Erlaubnis der Clanleitung.",
+                "Keine unnötigen Streitereien in öffentlichen Channels.",
+                "Anweisungen der Discord- bzw. Clanleitung sind zu beachten.",
+                "Private Gespräche und interne Clanangelegenheiten werden nicht ohne Zustimmung nach außen getragen."
+            ]
+        },
+        "9": {
+            "titel": "Fairness & Zusammenhalt",
+            "punkte": [
+                "Helft euch gegenseitig und arbeitet als Team.",
+                "Clanmitglieder werden nicht absichtlich benachteiligt oder sabotiert.",
+                "Probleme sollten zuerst intern und ruhig geklärt werden.",
+                "Bei Streitigkeiten kann die Clanleitung als neutrale Partei eingeschaltet werden.",
+                "Ziel des Clans ist es, gemeinsam Spaß zu haben und den Clan voranzubringen."
+            ]
+        },
+        "10": {
+            "titel": "Konsequenzen",
+            "punkte": [
+                "Verwarnung",
+                "Geld- oder Itemstrafe",
+                "Rückerstattung des entstandenen Schadens",
+                "Permanenter Clanausschluss",
+                "Die Clanleitung kann bei besonders schweren Verstößen direkt eine entsprechende Konsequenz verhängen."
+            ]
+        }
+    }
+}

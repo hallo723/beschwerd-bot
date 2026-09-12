@@ -4105,6 +4105,16 @@ async def on_message(
     )
 
     # --------------------------------------------------------
+    # BOT HAT DIESES TICKET VERLASSEN
+    # --------------------------------------------------------
+
+    if state.get(
+        "bot_left",
+        False
+    ):
+        return
+
+    # --------------------------------------------------------
     # ABGESCHLOSSENER FALL
     # --------------------------------------------------------
 
@@ -4287,7 +4297,97 @@ async def on_app_command_error(
     except Exception:
         pass
 
+# ============================================================
+# /LEAVE – BOT AUS DIESEM TICKET ENTFERNEN
+# ============================================================
 
+@bot.tree.command(
+    name="leave",
+    description="Der Bot verlässt dieses Ticket und reagiert dort nicht mehr."
+)
+async def leave_ticket(
+    interaction: discord.Interaction
+):
+
+    channel = interaction.channel
+
+    # --------------------------------------------------------
+    # NUR IN BESCHWERDE-TICKETS
+    # --------------------------------------------------------
+
+    if not is_complaint_ticket(channel):
+
+        await interaction.response.send_message(
+            "❌ Dieser Befehl kann nur in einem Ticket verwendet werden.",
+            ephemeral=True
+        )
+
+        return
+
+    # --------------------------------------------------------
+    # STATE LADEN
+    # --------------------------------------------------------
+
+    state = get_state(
+        channel.id
+    )
+
+    # --------------------------------------------------------
+    # BEREITS VERLASSEN
+    # --------------------------------------------------------
+
+    if state.get(
+        "bot_left",
+        False
+    ):
+
+        await interaction.response.send_message(
+            "ℹ️ Ich bin aus diesem Ticket bereits raus.",
+            ephemeral=True
+        )
+
+        return
+
+    # --------------------------------------------------------
+    # BOT AUS TICKET ENTFERNEN
+    # --------------------------------------------------------
+
+    state[
+        "bot_left"
+    ] = True
+
+    state[
+        "bot_left_by"
+    ] = str(
+        interaction.user.id
+    )
+
+    state[
+        "bot_left_at"
+    ] = discord.utils.utcnow().isoformat()
+
+    save_state(
+        channel.id,
+        state
+    )
+
+    # --------------------------------------------------------
+    # BESTÄTIGUNG IM TICKET
+    # --------------------------------------------------------
+
+    await interaction.response.send_message(
+        "🚪 **Bot verlassen**\n\n"
+        "Ich bin nicht länger für dieses Ticket zuständig "
+        "und werde hier keine weiteren Nachrichten oder "
+        "KI-Prüfungen durchführen."
+    )
+
+    print(
+        f"[LEAVE] Bot hat Ticket verlassen: "
+        f"{channel.name} | "
+        f"ausgelöst von {interaction.user} "
+        f"({interaction.user.id})"
+    )
 # ============================================================
 # START
 # ============================================================

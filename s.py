@@ -4089,6 +4089,17 @@ async def on_message(
     if message.author.bot:
         return
 
+    # --------------------------------------------------------
+    # AUTOMOD
+    # --------------------------------------------------------
+
+    was_moderated = await automod_check_message(
+        message
+    )
+
+    if was_moderated:
+        return
+
     await bot.process_commands(
         message
     )
@@ -4420,6 +4431,252 @@ async def hide(
         "✅ Nachricht anonym gesendet.",
         ephemeral=True
     )
+# ============================================================
+# AUTO-MOD – BELEIDIGUNGSFILTER
+# ============================================================
+
+AUTOMOD_TIMEOUT_SECONDS = 10 * 60  # 10 Minuten
+
+# Wörter können später jederzeit ergänzt werden.
+# Bewusst als einzelne Begriffe/Varianten gespeichert.
+AUTOMOD_BAD_WORDS = {
+    "arsch",
+    "arschloch",
+    "idiot",
+    "idioten",
+    "idiotin",
+    "depp",
+    "deppen",
+    "dummkopf",
+    "blödmann",
+    "blödmann",
+    "trottel",
+    "vollidiot",
+    "vollidiotin",
+    "honk",
+    "spasti",
+    "spacko",
+    "opfer",
+    "wichser",
+    "wixxer",
+    "wixer",
+    "hurensohn",
+    "huso",
+    "bastard",
+    "missgeburt",
+    "scheiße",
+    "scheisse",
+    "scheiss",
+    "fick",
+    "ficker",
+    "fick dich",
+    "nigga",
+    "nigger",
+    "hs",
+    "nga",
+    "hure",
+    "spaßt",
+    "hurens0hn",
+    "hur3nsohn",
+    "hur3ns0hn",
+    "schlampe",
+    "Penis",
+    "ngga",
+    "N1gga",
+    "Neger",
+    "Nega",
+}
+
+# Wörter, die trotz Treffer nicht automatisch bestraft werden.
+# Hier kannst du später eigene Ausnahmen eintragen.
+AUTOMOD_WHITELIST = {
+    # "beispiel",
+}
+
+
+def normalize_automod_text(text: str) -> str:
+    """
+    Normalisiert Text, damit einfache Umgehungen
+    des Filters erkannt werden.
+    """
+
+    if not text:
+        return ""
+
+    text = unicodedata.normalize(
+        "NFKC",
+        text
+    ).lower()
+
+    # Häufige Trennzeichen entfernen.
+    text = re.sub(
+        r"[\s._\-*~`|/\\]+",
+        "",
+        text
+    )
+
+    return text
+
+
+def automod_detect_bad_word(
+    text: str
+) -> Optional[str]:
+
+    if not text:
+        return None
+
+    original = normalize(text)
+
+    # Whitelist zuerst prüfen.
+    for allowed in AUTOMOD_WHITELIST:
+
+        if normalize(allowed) in original:
+            return None
+
+    normalized = normalize_automod_text(
+        text
+    )
+
+    for word in AUTOMOD_BAD_WORDS:
+
+        word_normalized = normalize_automod_text(
+            word
+        )
+
+        if not word_normalized:
+            continue
+
+        # Bei kurzen Wörtern nur als eigenes Wort erkennen,
+        # damit nicht normale Wörter versehentlich getroffen werden.
+        if len(word_normalized) <= 4:
+
+            pattern = (
+                rf"(?<![a-zäöüß])"
+                rf"{re.escape(word_normalized)}"
+                rf"(?![a-zäöüß])"
+            )
+
+            if re.search(
+                pattern,
+                normalized
+            ):
+                return word
+
+        else:
+
+            if word_normalized in normalized:
+                return word
+
+    return None
+
+
+async def automod_check_message(
+    message: discord.Message
+) -> bool:
+    """
+    Gibt True zurück, wenn die Nachricht moderiert wurde.
+    """
+
+    if message.author.bot:
+        return False
+
+    if not message.guild:
+        return False
+
+    # Administratoren werden nicht automatisch bestraft.
+    if isinstance(
+        message.author,
+        discord.Member
+    ):
+
+        if message.author.guild_permissions.administrator:
+            return False
+
+    detected = automod_detect_bad_word(
+        message.content or ""
+    )
+
+    if not detected:
+        return False
+
+    member = message.author
+
+    if not isinstance(
+        member,
+        discord.Member
+    ):
+        return False
+
+    # Bot braucht Moderate Members.
+    if not message.guild.me:
+        return False
+
+    if not message.guild.me.guild_permissions.moderate_members:
+        print(
+            "[AUTOMOD] ❌ Bot hat keine "
+            "Moderate-Members-Berechtigung."
+        )
+        return False
+
+    # Bots dürfen keine höher stehenden Mitglieder timeouten.
+    if member.top_role >= message.guild.me.top_role:
+        print(
+            f"[AUTOMOD] ❌ Kann {member} nicht timeouten: "
+            "Rolle ist zu hoch."
+        )
+        return False
+
+    try:
+
+        # Nachricht löschen.
+        try:
+            await message.delete()
+        except Exception as error:
+            print(
+                f"[AUTOMOD] Nachricht konnte nicht gelöscht werden: "
+                f"{error!r}"
+            )
+
+        # Timeout setzen.
+        until = (
+            discord.utils.utcnow()
+            + __import__("datetime").timedelta(
+                seconds=AUTOMOD_TIMEOUT_SECONDS
+            )
+        )
+
+        await member.edit(
+            timed_out_until=until,
+            reason=(
+                f"AutoMod: Beleidigung erkannt "
+                f"({detected})"
+            )
+        )
+
+        print(
+            f"[AUTOMOD] 🔇 Timeout: "
+            f"{member} ({member.id}) | "
+            f"Treffer: {detected} | "
+            f"Dauer: {AUTOMOD_TIMEOUT_SECONDS}s"
+        )
+
+        return True
+
+    except discord.Forbidden:
+
+        print(
+            f"[AUTOMOD] ❌ Keine Berechtigung für "
+            f"{member} ({member.id})"
+        )
+
+    except Exception as error:
+
+        print(
+            f"[AUTOMOD] ❌ Fehler bei "
+            f"{member}: {error!r}"
+        )
+
+    return False
 # ============================================================
 # START
 # ============================================================

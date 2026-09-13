@@ -302,6 +302,15 @@ def load_json(
 DEFAULT_CONFIG = {
     "staff_role_id": None,
     "complaint_log_channel_id": None,
+
+    "verify": {
+        "join_role_id": None,
+        "verified_role_id": None,
+        "channel_id": None,
+        "log_channel_id": None,
+        "panel_message_id": None
+    },
+
     "complaint_log_settings": {
         "send_evidence": True,
         "send_complaint": True,
@@ -4677,6 +4686,1029 @@ async def automod_check_message(
         )
 
     return False
+# ============================================================
+# VERIFY SYSTEM
+# ============================================================
+
+DEFAULT_VERIFY_CONFIG = {
+    "join_role_id": None,
+    "verified_role_id": None,
+    "channel_id": None,
+    "log_channel_id": None,
+    "panel_message_id": None
+}
+
+
+def get_verify_config(
+    guild: discord.Guild
+) -> dict:
+
+    verify_config = config.get(
+        "verify",
+        DEFAULT_VERIFY_CONFIG.copy()
+    )
+
+    if not isinstance(
+        verify_config,
+        dict
+    ):
+        return DEFAULT_VERIFY_CONFIG.copy()
+
+    return verify_config
+
+
+def get_verify_role(
+    guild: discord.Guild,
+    key: str
+) -> Optional[discord.Role]:
+
+    verify_config = get_verify_config(
+        guild
+    )
+
+    role_id = verify_config.get(
+        key
+    )
+
+    if not role_id:
+        return None
+
+    try:
+
+        return guild.get_role(
+            int(role_id)
+        )
+
+    except Exception:
+
+        return None
+
+
+def get_verify_channel(
+    guild: discord.Guild
+) -> Optional[discord.TextChannel]:
+
+    verify_config = get_verify_config(
+        guild
+    )
+
+    channel_id = verify_config.get(
+        "channel_id"
+    )
+
+    if not channel_id:
+        return None
+
+    try:
+
+        channel = guild.get_channel(
+            int(channel_id)
+        )
+
+        if isinstance(
+            channel,
+            discord.TextChannel
+        ):
+            return channel
+
+    except Exception:
+        pass
+
+    return None
+
+
+def get_verify_log_channel(
+    guild: discord.Guild
+) -> Optional[discord.TextChannel]:
+
+    verify_config = get_verify_config(
+        guild
+    )
+
+    channel_id = verify_config.get(
+        "log_channel_id"
+    )
+
+    if not channel_id:
+        return None
+
+    try:
+
+        channel = guild.get_channel(
+            int(channel_id)
+        )
+
+        if isinstance(
+            channel,
+            discord.TextChannel
+        ):
+            return channel
+
+    except Exception:
+        pass
+
+    return None
+
+
+# ============================================================
+# VERIFY EMBED
+# ============================================================
+
+def build_verify_embed() -> discord.Embed:
+
+    embed = discord.Embed(
+        title="🛡️ Server-Verifizierung",
+        description=(
+            "Willkommen auf **ReVu**!\n\n"
+            "Um Zugriff auf den Server zu erhalten, "
+            "musst du dich zuerst verifizieren.\n\n"
+            "Klicke auf **✅ Verifizieren**, um deine "
+            "Member-Rolle zu erhalten.\n\n"
+            "Nach erfolgreicher Verifizierung wird deine "
+            "New-Rolle automatisch entfernt."
+        ),
+        color=discord.Color.blurple()
+    )
+
+    embed.set_footer(
+        text="ReVu • Verifizierungssystem"
+    )
+
+    return embed
+
+
+# ============================================================
+# VERIFY BERECHTIGUNGEN
+# ============================================================
+
+async def configure_verify_channel_permissions(
+    guild: discord.Guild,
+    channel: discord.TextChannel,
+    join_role: discord.Role,
+    verified_role: discord.Role
+) -> bool:
+
+    """
+    Richtet die wichtigsten Berechtigungen für den
+    Verify-Channel automatisch ein.
+
+    New:
+        - darf Channel sehen
+        - darf Nachrichten sehen
+        - darf nicht schreiben
+
+    Verified:
+        - darf Channel sehen
+        - darf Nachrichten sehen
+
+    @everyone:
+        - darf den Channel sehen
+    """
+
+    try:
+
+        await channel.set_permissions(
+            join_role,
+            view_channel=True,
+            read_message_history=True,
+            send_messages=False,
+            add_reactions=False,
+            reason="ReVu Verify-System"
+        )
+
+        await channel.set_permissions(
+            verified_role,
+            view_channel=True,
+            read_message_history=True,
+            send_messages=False,
+            add_reactions=False,
+            reason="ReVu Verify-System"
+        )
+
+        return True
+
+    except discord.Forbidden:
+
+        print(
+            "[VERIFY] ❌ Keine Berechtigung, "
+            "Verify-Channel zu konfigurieren."
+        )
+
+        return False
+
+    except Exception as error:
+
+        print(
+            f"[VERIFY] ❌ Permission-Fehler: {error!r}"
+        )
+
+        return False
+
+
+# ============================================================
+# VERIFY VIEW
+# ============================================================
+
+class VerifyView(
+    discord.ui.View
+):
+
+    def __init__(self):
+
+        super().__init__(
+            timeout=None
+        )
+
+    @discord.ui.button(
+        label="Verifizieren",
+        emoji="✅",
+        style=discord.ButtonStyle.success,
+        custom_id="revu_verify_button"
+    )
+    async def verify(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+
+        guild = interaction.guild
+
+        if guild is None:
+
+            await interaction.response.send_message(
+                "❌ Dieser Button funktioniert nur auf einem Server.",
+                ephemeral=True
+            )
+
+            return
+
+        member = interaction.user
+
+        if not isinstance(
+            member,
+            discord.Member
+        ):
+
+            await interaction.response.send_message(
+                "❌ Benutzer konnte nicht erkannt werden.",
+                ephemeral=True
+            )
+
+            return
+
+        join_role = get_verify_role(
+            guild,
+            "join_role_id"
+        )
+
+        verified_role = get_verify_role(
+            guild,
+            "verified_role_id"
+        )
+
+        if not join_role or not verified_role:
+
+            await interaction.response.send_message(
+                "❌ Das Verify-System wurde noch nicht "
+                "vollständig eingerichtet.",
+                ephemeral=True
+            )
+
+            return
+
+        # ----------------------------------------------------
+        # BEREITS VERIFIZIERT
+        # ----------------------------------------------------
+
+        if verified_role in member.roles:
+
+            await interaction.response.send_message(
+                "ℹ️ Du bist bereits verifiziert.",
+                ephemeral=True
+            )
+
+            return
+
+        # ----------------------------------------------------
+        # BOT
+        # ----------------------------------------------------
+
+        bot_member = guild.me
+
+        if bot_member is None:
+
+            await interaction.response.send_message(
+                "❌ Der Bot konnte nicht erkannt werden.",
+                ephemeral=True
+            )
+
+            return
+
+        # ----------------------------------------------------
+        # ROLLEN-HIERARCHIE
+        # ----------------------------------------------------
+
+        if verified_role >= bot_member.top_role:
+
+            await interaction.response.send_message(
+                "❌ Ich kann die Member-Rolle nicht vergeben.\n\n"
+                "Meine Bot-Rolle muss **über** der "
+                "Member-Rolle stehen.",
+                ephemeral=True
+            )
+
+            return
+
+        if join_role >= bot_member.top_role:
+
+            await interaction.response.send_message(
+                "❌ Ich kann die New-Rolle nicht entfernen.\n\n"
+                "Meine Bot-Rolle muss **über** der "
+                "New-Rolle stehen.",
+                ephemeral=True
+            )
+
+            return
+
+        await interaction.response.defer(
+            ephemeral=True
+        )
+
+        try:
+
+            # ------------------------------------------------
+            # VERIFIED GEBEN
+            # ------------------------------------------------
+
+            await member.add_roles(
+                verified_role,
+                reason="ReVu Verify-System • Verifiziert"
+            )
+
+            # ------------------------------------------------
+            # NEW ENTFERNEN
+            # ------------------------------------------------
+
+            if join_role in member.roles:
+
+                await member.remove_roles(
+                    join_role,
+                    reason="ReVu Verify-System • Verifiziert"
+                )
+
+            # ------------------------------------------------
+            # ERFOLG
+            # ------------------------------------------------
+
+            await interaction.followup.send(
+                "✅ **Erfolgreich verifiziert!**\n\n"
+                f"Du hast jetzt {verified_role.mention}.",
+                ephemeral=True
+            )
+
+            # ------------------------------------------------
+            # LOG
+            # ------------------------------------------------
+
+            log_channel = get_verify_log_channel(
+                guild
+            )
+
+            if log_channel:
+
+                embed = discord.Embed(
+                    title="✅ User verifiziert",
+                    color=discord.Color.green(),
+                    timestamp=discord.utils.utcnow()
+                )
+
+                embed.add_field(
+                    name="👤 Benutzer",
+                    value=(
+                        f"{member.mention}\n"
+                        f"`{member.id}`"
+                    ),
+                    inline=True
+                )
+
+                embed.add_field(
+                    name="🎭 Rolle",
+                    value=verified_role.mention,
+                    inline=True
+                )
+
+                embed.set_footer(
+                    text="ReVu • Verify-System"
+                )
+
+                try:
+
+                    await log_channel.send(
+                        embed=embed
+                    )
+
+                except Exception as error:
+
+                    print(
+                        f"[VERIFY LOG] Fehler: {error!r}"
+                    )
+
+            print(
+                f"[VERIFY] ✅ {member} "
+                f"({member.id}) verifiziert."
+            )
+
+        except discord.Forbidden:
+
+            await interaction.followup.send(
+                "❌ Ich habe keine Berechtigung, "
+                "die Rollen zu verwalten.\n\n"
+                "Prüfe die Rollen-Hierarchie.",
+                ephemeral=True
+            )
+
+        except Exception as error:
+
+            print(
+                f"[VERIFY] Fehler: {error!r}"
+            )
+
+            await interaction.followup.send(
+                "❌ Bei der Verifizierung ist "
+                "ein technischer Fehler aufgetreten.",
+                ephemeral=True
+            )
+
+
+# ============================================================
+# /VERIFY
+# ============================================================
+
+verify_group = app_commands.Group(
+    name="verify",
+    description="Verifizierungssystem verwalten"
+)
+
+
+# ============================================================
+# /VERIFY SETUP
+# ============================================================
+
+@verify_group.command(
+    name="setup",
+    description="Richtet das Verify-System ein."
+)
+@app_commands.describe(
+    join_role="Rolle für neue Benutzer.",
+    verified_role="Rolle für verifizierte Benutzer.",
+    channel="Verify-Channel.",
+    log_channel="Optionaler Log-Channel."
+)
+@app_commands.checks.has_permissions(
+    administrator=True
+)
+async def verify_setup(
+    interaction: discord.Interaction,
+    join_role: discord.Role,
+    verified_role: discord.Role,
+    channel: discord.TextChannel,
+    log_channel: Optional[discord.TextChannel] = None
+):
+
+    guild = interaction.guild
+
+    if guild is None:
+
+        await interaction.response.send_message(
+            "❌ Dieser Befehl funktioniert nur auf einem Server.",
+            ephemeral=True
+        )
+
+        return
+
+    bot_member = guild.me
+
+    if bot_member is None:
+
+        await interaction.response.send_message(
+            "❌ Bot-Mitglied konnte nicht erkannt werden.",
+            ephemeral=True
+        )
+
+        return
+
+    # --------------------------------------------------------
+    # ROLLEN PRÜFEN
+    # --------------------------------------------------------
+
+    if join_role == verified_role:
+
+        await interaction.response.send_message(
+            "❌ New-Rolle und Verified-Rolle dürfen "
+            "nicht identisch sein.",
+            ephemeral=True
+        )
+
+        return
+
+    if join_role >= bot_member.top_role:
+
+        await interaction.response.send_message(
+            "❌ Die New-Rolle ist zu hoch.\n\n"
+            "Meine Bot-Rolle muss **über** der New-Rolle "
+            "stehen.",
+            ephemeral=True
+        )
+
+        return
+
+    if verified_role >= bot_member.top_role:
+
+        await interaction.response.send_message(
+            "❌ Die Verified-Rolle ist zu hoch.\n\n"
+            "Meine Bot-Rolle muss **über** der Verified-Rolle "
+            "stehen.",
+            ephemeral=True
+        )
+
+        return
+
+    # --------------------------------------------------------
+    # ALTE PANEL-ID VORHER SICHERN
+    # --------------------------------------------------------
+
+    old_verify_config = get_verify_config(
+        guild
+    )
+
+    old_message_id = old_verify_config.get(
+        "panel_message_id"
+    )
+
+    # --------------------------------------------------------
+    # CONFIG SPEICHERN
+    # --------------------------------------------------------
+
+    config["verify"] = {
+        "join_role_id": join_role.id,
+        "verified_role_id": verified_role.id,
+        "channel_id": channel.id,
+        "log_channel_id": (
+            log_channel.id
+            if log_channel
+            else None
+        ),
+        "panel_message_id": old_message_id
+    }
+
+    save_json(
+        CONFIG_FILE,
+        config
+    )
+
+    # --------------------------------------------------------
+    # VERIFY CHANNEL EINRICHTEN
+    # --------------------------------------------------------
+
+    permissions_ok = (
+        await configure_verify_channel_permissions(
+            guild,
+            channel,
+            join_role,
+            verified_role
+        )
+    )
+
+    # --------------------------------------------------------
+    # PANEL
+    # --------------------------------------------------------
+
+    panel_message = None
+
+    if old_message_id:
+
+        try:
+
+            panel_message = await channel.fetch_message(
+                int(old_message_id)
+            )
+
+            await panel_message.edit(
+                embed=build_verify_embed(),
+                view=VerifyView()
+            )
+
+        except Exception as error:
+
+            print(
+                f"[VERIFY] Altes Panel nicht gefunden: "
+                f"{error!r}"
+            )
+
+            panel_message = None
+
+    if panel_message is None:
+
+        panel_message = await channel.send(
+            embed=build_verify_embed(),
+            view=VerifyView()
+        )
+
+    config["verify"][
+        "panel_message_id"
+    ] = panel_message.id
+
+    save_json(
+        CONFIG_FILE,
+        config
+    )
+
+    # --------------------------------------------------------
+    # BESTÄTIGUNG
+    # --------------------------------------------------------
+
+    embed = discord.Embed(
+        title="✅ Verify-System eingerichtet",
+        color=discord.Color.green()
+    )
+
+    embed.add_field(
+        name="🆕 New-Rolle",
+        value=join_role.mention,
+        inline=True
+    )
+
+    embed.add_field(
+        name="✅ Verified-Rolle",
+        value=verified_role.mention,
+        inline=True
+    )
+
+    embed.add_field(
+        name="📁 Verify-Channel",
+        value=channel.mention,
+        inline=True
+    )
+
+    embed.add_field(
+        name="📋 Log-Channel",
+        value=(
+            log_channel.mention
+            if log_channel
+            else "❌ Kein Log"
+        ),
+        inline=True
+    )
+
+    embed.add_field(
+        name="🔘 Panel",
+        value=(
+            f"[Verify-Nachricht]"
+            f"({panel_message.jump_url})"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="🔐 Channel-Berechtigungen",
+        value=(
+            "✅ Automatisch eingerichtet"
+            if permissions_ok
+            else "⚠️ Konnte nicht vollständig eingerichtet werden"
+        ),
+        inline=False
+    )
+
+    await interaction.response.send_message(
+        embed=embed,
+        ephemeral=True
+    )
+
+
+# ============================================================
+# /VERIFY CONFIG
+# ============================================================
+
+@verify_group.command(
+    name="config",
+    description="Zeigt die Verify-Konfiguration."
+)
+@app_commands.checks.has_permissions(
+    administrator=True
+)
+async def verify_config_command(
+    interaction: discord.Interaction
+):
+
+    guild = interaction.guild
+
+    if guild is None:
+
+        await interaction.response.send_message(
+            "❌ Nur auf einem Server verfügbar.",
+            ephemeral=True
+        )
+
+        return
+
+    verify_config = get_verify_config(
+        guild
+    )
+
+    join_role = get_verify_role(
+        guild,
+        "join_role_id"
+    )
+
+    verified_role = get_verify_role(
+        guild,
+        "verified_role_id"
+    )
+
+    channel = get_verify_channel(
+        guild
+    )
+
+    log_channel = get_verify_log_channel(
+        guild
+    )
+
+    embed = discord.Embed(
+        title="⚙️ Verify-Konfiguration",
+        color=discord.Color.blurple()
+    )
+
+    embed.add_field(
+        name="🆕 New-Rolle",
+        value=(
+            join_role.mention
+            if join_role
+            else "❌ Nicht gesetzt"
+        ),
+        inline=True
+    )
+
+    embed.add_field(
+        name="✅ Verified-Rolle",
+        value=(
+            verified_role.mention
+            if verified_role
+            else "❌ Nicht gesetzt"
+        ),
+        inline=True
+    )
+
+    embed.add_field(
+        name="📁 Verify-Channel",
+        value=(
+            channel.mention
+            if channel
+            else "❌ Nicht gesetzt"
+        ),
+        inline=True
+    )
+
+    embed.add_field(
+        name="📋 Log-Channel",
+        value=(
+            log_channel.mention
+            if log_channel
+            else "❌ Kein Log"
+        ),
+        inline=True
+    )
+
+    embed.add_field(
+        name="🆔 Panel-ID",
+        value=str(
+            verify_config.get(
+                "panel_message_id"
+            )
+            or "Nicht gesetzt"
+        ),
+        inline=False
+    )
+
+    await interaction.response.send_message(
+        embed=embed,
+        ephemeral=True
+    )
+
+
+# ============================================================
+# /VERIFY PANEL
+# ============================================================
+
+@verify_group.command(
+    name="panel",
+    description="Erstellt eine neue Verify-Nachricht."
+)
+@app_commands.checks.has_permissions(
+    administrator=True
+)
+async def verify_panel(
+    interaction: discord.Interaction
+):
+
+    guild = interaction.guild
+
+    if guild is None:
+
+        await interaction.response.send_message(
+            "❌ Nur auf einem Server verfügbar.",
+            ephemeral=True
+        )
+
+        return
+
+    channel = get_verify_channel(
+        guild
+    )
+
+    if not channel:
+
+        await interaction.response.send_message(
+            "❌ Es wurde noch kein Verify-Channel "
+            "eingerichtet.\nNutze zuerst `/verify setup`.",
+            ephemeral=True
+        )
+
+        return
+
+    message = await channel.send(
+        embed=build_verify_embed(),
+        view=VerifyView()
+    )
+
+    config["verify"][
+        "panel_message_id"
+    ] = message.id
+
+    save_json(
+        CONFIG_FILE,
+        config
+    )
+
+    await interaction.response.send_message(
+        "✅ Neue Verify-Nachricht erstellt:\n"
+        f"{message.jump_url}",
+        ephemeral=True
+    )
+
+
+# ============================================================
+# /VERIFY RESET
+# ============================================================
+
+@verify_group.command(
+    name="reset",
+    description="Setzt das Verify-System zurück."
+)
+@app_commands.checks.has_permissions(
+    administrator=True
+)
+async def verify_reset(
+    interaction: discord.Interaction
+):
+
+    guild = interaction.guild
+
+    if guild is None:
+
+        await interaction.response.send_message(
+            "❌ Nur auf einem Server verfügbar.",
+            ephemeral=True
+        )
+
+        return
+
+    verify_config = get_verify_config(
+        guild
+    )
+
+    panel_message_id = verify_config.get(
+        "panel_message_id"
+    )
+
+    channel = get_verify_channel(
+        guild
+    )
+
+    # --------------------------------------------------------
+    # ALTES PANEL ENTFERNEN
+    # --------------------------------------------------------
+
+    if panel_message_id and channel:
+
+        try:
+
+            message = await channel.fetch_message(
+                int(panel_message_id)
+            )
+
+            await message.delete()
+
+        except Exception as error:
+
+            print(
+                f"[VERIFY RESET] Panel konnte "
+                f"nicht gelöscht werden: {error!r}"
+            )
+
+    # --------------------------------------------------------
+    # CONFIG ZURÜCKSETZEN
+    # --------------------------------------------------------
+
+    config["verify"] = {
+        "join_role_id": None,
+        "verified_role_id": None,
+        "channel_id": None,
+        "log_channel_id": None,
+        "panel_message_id": None
+    }
+
+    save_json(
+        CONFIG_FILE,
+        config
+    )
+
+    await interaction.response.send_message(
+        "🗑️ **Verify-System zurückgesetzt.**\n"
+        "Das gespeicherte Verify-Panel wurde ebenfalls entfernt.",
+        ephemeral=True
+    )
+
+
+bot.tree.add_command(
+    verify_group
+)
+
+
+# ============================================================
+# USER BEI JOIN AUTOMATISCH AUF NEW SETZEN
+# ============================================================
+
+@bot.event
+async def on_member_join(
+    member: discord.Member
+):
+
+    if member.bot:
+        return
+
+    join_role = get_verify_role(
+        member.guild,
+        "join_role_id"
+    )
+
+    if not join_role:
+
+        print(
+            f"[VERIFY] Keine New-Rolle für "
+            f"{member.guild.name} konfiguriert."
+        )
+
+        return
+
+    bot_member = member.guild.me
+
+    if bot_member is None:
+        return
+
+    if join_role >= bot_member.top_role:
+
+        print(
+            f"[VERIFY] ❌ New-Rolle zu hoch: "
+            f"{join_role.name}"
+        )
+
+        return
+
+    try:
+
+        await member.add_roles(
+            join_role,
+            reason="ReVu Verify-System • Neuer User"
+        )
+
+        print(
+            f"[VERIFY] 🆕 New-Rolle vergeben: "
+            f"{member} ({member.id})"
+        )
+
+    except discord.Forbidden:
+
+        print(
+            f"[VERIFY] ❌ Keine Berechtigung, "
+            f"{join_role.name} zu vergeben."
+        )
+
+    except Exception as error:
+
+        print(
+            f"[VERIFY] ❌ Join-Fehler: "
+            f"{error!r}"
+        )
 # ============================================================
 # START
 # ============================================================

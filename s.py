@@ -4388,6 +4388,41 @@ async def leave_ticket(
         f"ausgelöst von {interaction.user} "
         f"({interaction.user.id})"
     )
+	
+# ============================================================
+# /HIDE – ANONYME BOT-NACHRICHT
+# ============================================================
+
+@bot.tree.command(
+    name="hide",
+    description="Sendet eine Nachricht anonym über den Bot."
+)
+@app_commands.describe(
+    message="Die Nachricht, die der Bot senden soll."
+)
+@app_commands.checks.has_permissions(administrator=True)
+async def hide(
+    interaction: discord.Interaction,
+    message: str
+):
+    # Slash-Command unsichtbar für andere bestätigen
+    await interaction.response.defer(ephemeral=True)
+
+    # Nachricht als Bot im aktuellen Channel senden
+    if interaction.channel is None:
+        await interaction.followup.send(
+            "❌ Hier kann keine Nachricht gesendet werden.",
+            ephemeral=True
+        )
+        return
+
+    await interaction.channel.send(message)
+
+    # Nur der ausführende Admin sieht diese Bestätigung
+    await interaction.followup.send(
+        "✅ Nachricht anonym gesendet.",
+        ephemeral=True
+    )
 # ============================================================
 # START
 # ============================================================

@@ -4825,7 +4825,8 @@ def build_verify_embed() -> discord.Embed:
             "Klicke auf **✅ Verifizieren**, um deine "
             "Member-Rolle zu erhalten.\n\n"
             "Nach erfolgreicher Verifizierung wird deine "
-            "New-Rolle automatisch entfernt."
+            "New-Rolle automatisch entfernt und du erhältst "
+            "Zugriff auf den restlichen Server."
         ),
         color=discord.Color.blurple()
     )
@@ -4841,49 +4842,84 @@ def build_verify_embed() -> discord.Embed:
 # VERIFY BERECHTIGUNGEN
 # ============================================================
 
-async def configure_verify_channel_permissions(
+async def configure_verify_permissions(
     guild: discord.Guild,
-    channel: discord.TextChannel,
+    verify_channel: discord.TextChannel,
     join_role: discord.Role,
     verified_role: discord.Role
 ) -> bool:
 
     """
-    Richtet die wichtigsten Berechtigungen für den
-    Verify-Channel automatisch ein.
+    Richtet das Verify-System automatisch ein.
 
-    New:
-        - darf Channel sehen
-        - darf Nachrichten sehen
-        - darf nicht schreiben
+    JOIN-ROLLE:
+        - sieht den Verify-Channel
+        - sieht keine anderen Channels
+        - kann im Verify-Channel nicht schreiben
 
-    Verified:
-        - darf Channel sehen
-        - darf Nachrichten sehen
+    VERIFIED-ROLLE:
+        - wird nach der Verifizierung vergeben
+        - die Join-Rolle wird entfernt
+        - danach gelten die normalen Server-Berechtigungen
 
-    @everyone:
-        - darf den Channel sehen
+    Die normalen Channel-Berechtigungen werden nicht
+    für die Verified-Rolle überschrieben.
     """
 
     try:
 
-        await channel.set_permissions(
-            join_role,
-            view_channel=True,
-            read_message_history=True,
-            send_messages=False,
-            add_reactions=False,
-            reason="ReVu Verify-System"
-        )
+        # ----------------------------------------------------
+        # ALLE CHANNELS
+        # ----------------------------------------------------
 
-        await channel.set_permissions(
-            verified_role,
-            view_channel=True,
-            read_message_history=True,
-            send_messages=False,
-            add_reactions=False,
-            reason="ReVu Verify-System"
-        )
+        for channel in guild.channels:
+
+            # Verify-Channel
+            if channel.id == verify_channel.id:
+
+                await channel.set_permissions(
+                    join_role,
+                    view_channel=True,
+                    read_message_history=True,
+                    send_messages=False,
+                    add_reactions=False,
+                    reason="ReVu Verify-System • Verify-Channel"
+                )
+
+                await channel.set_permissions(
+                    verified_role,
+                    view_channel=True,
+                    read_message_history=True,
+                    reason="ReVu Verify-System • Verified-Zugriff"
+                )
+
+                continue
+
+            # ------------------------------------------------
+            # ALLE ANDEREN CHANNELS
+            # ------------------------------------------------
+
+            try:
+
+                await channel.set_permissions(
+                    join_role,
+                    view_channel=False,
+                    reason="ReVu Verify-System • New-Rolle verstecken"
+                )
+
+            except discord.Forbidden:
+
+                print(
+                    f"[VERIFY] ⚠️ Keine Berechtigung für "
+                    f"Channel #{channel.name}"
+                )
+
+            except Exception as error:
+
+                print(
+                    f"[VERIFY] ⚠️ Fehler bei "
+                    f"#{channel.name}: {error!r}"
+                )
 
         return True
 
@@ -4891,7 +4927,7 @@ async def configure_verify_channel_permissions(
 
         print(
             "[VERIFY] ❌ Keine Berechtigung, "
-            "Verify-Channel zu konfigurieren."
+            "die Verify-Berechtigungen einzurichten."
         )
 
         return False
@@ -4955,6 +4991,10 @@ class VerifyView(
             )
 
             return
+
+        # ----------------------------------------------------
+        # ROLLEN HOLEN
+        # ----------------------------------------------------
 
         join_role = get_verify_role(
             guild,
@@ -5234,7 +5274,7 @@ async def verify_setup(
         return
 
     # --------------------------------------------------------
-    # ALTE PANEL-ID VORHER SICHERN
+    # ALTE PANEL-ID SICHERN
     # --------------------------------------------------------
 
     old_verify_config = get_verify_config(
@@ -5267,11 +5307,11 @@ async def verify_setup(
     )
 
     # --------------------------------------------------------
-    # VERIFY CHANNEL EINRICHTEN
+    # SERVER-BERECHTIGUNGEN EINRICHTEN
     # --------------------------------------------------------
 
     permissions_ok = (
-        await configure_verify_channel_permissions(
+        await configure_verify_permissions(
             guild,
             channel,
             join_role,
@@ -5307,12 +5347,20 @@ async def verify_setup(
 
             panel_message = None
 
+    # --------------------------------------------------------
+    # NEUES PANEL
+    # --------------------------------------------------------
+
     if panel_message is None:
 
         panel_message = await channel.send(
             embed=build_verify_embed(),
             view=VerifyView()
         )
+
+    # --------------------------------------------------------
+    # PANEL-ID SPEICHERN
+    # --------------------------------------------------------
 
     config["verify"][
         "panel_message_id"
@@ -5361,20 +5409,20 @@ async def verify_setup(
     )
 
     embed.add_field(
-        name="🔘 Panel",
+        name="🔐 New-Rollen-Schutz",
         value=(
-            f"[Verify-Nachricht]"
-            f"({panel_message.jump_url})"
+            "✅ New sieht nur den Verify-Channel"
+            if permissions_ok
+            else "⚠️ Berechtigungen konnten nicht vollständig eingerichtet werden"
         ),
         inline=False
     )
 
     embed.add_field(
-        name="🔐 Channel-Berechtigungen",
+        name="🔘 Panel",
         value=(
-            "✅ Automatisch eingerichtet"
-            if permissions_ok
-            else "⚠️ Konnte nicht vollständig eingerichtet werden"
+            f"[Verify-Nachricht]"
+            f"({panel_message.jump_url})"
         ),
         inline=False
     )

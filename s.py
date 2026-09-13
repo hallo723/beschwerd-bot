@@ -4405,10 +4405,8 @@ async def hide(
     interaction: discord.Interaction,
     message: str
 ):
-    # Slash-Command unsichtbar für andere bestätigen
     await interaction.response.defer(ephemeral=True)
 
-    # Nachricht als Bot im aktuellen Channel senden
     if interaction.channel is None:
         await interaction.followup.send(
             "❌ Hier kann keine Nachricht gesendet werden.",
@@ -4418,7 +4416,6 @@ async def hide(
 
     await interaction.channel.send(message)
 
-    # Nur der ausführende Admin sieht diese Bestätigung
     await interaction.followup.send(
         "✅ Nachricht anonym gesendet.",
         ephemeral=True

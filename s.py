@@ -18,6 +18,8 @@ from google.genai import types
 
 import brain
 
+import random
+
 
 # ============================================================
 # RE:VU TICKET MANAGER
@@ -5757,6 +5759,2449 @@ async def on_member_join(
             f"[VERIFY] ❌ Join-Fehler: "
             f"{error!r}"
         )
+# ============================================================
+# 🎭 IMPOSTER – WER IST DER IMPOSTER?
+# ============================================================
+
+# Aktive Spiele im RAM.
+# Pro Server maximal ein Imposter-Spiel.
+IMPOSTER_GAMES: dict[int, dict] = {}
+
+
+# ------------------------------------------------------------
+# WORTDATENBANK
+# ------------------------------------------------------------
+
+IMPOSTER_WORDS = {
+
+    "Alltag": [
+        ("Auto", "Man sieht es oft unterwegs.", "mittel"),
+        ("Handy", "Viele Menschen benutzen es jeden Tag.", "leicht"),
+        ("Schlüssel", "Man braucht es oft, bevor man irgendwo reinkommt.", "mittel"),
+        ("Rucksack", "Man kann viele Dinge darin transportieren.", "leicht"),
+        ("Regenschirm", "Er kann bei schlechtem Wetter nützlich sein.", "mittel"),
+        ("Uhr", "Sie zeigt etwas an, das ständig weiterläuft.", "leicht"),
+        ("Bett", "Man verbringt dort normalerweise mehrere Stunden.", "leicht"),
+        ("Tür", "Sie kann etwas voneinander trennen.", "leicht"),
+        ("Lampe", "Sie kann einen dunklen Raum heller machen.", "leicht"),
+        ("Spiegel", "Man kann darin etwas von sich selbst sehen.", "leicht"),
+    ],
+
+    "Essen": [
+        ("Pizza", "Sie wird häufig geteilt.", "leicht"),
+        ("Burger", "Man kann ihn mit den Händen essen.", "leicht"),
+        ("Pommes", "Sie werden häufig als Beilage gegessen.", "leicht"),
+        ("Schokolade", "Viele verbinden sie mit etwas Süßem.", "leicht"),
+        ("Apfel", "Er wächst an einem Baum.", "leicht"),
+        ("Banane", "Sie hat eine auffällige Schale.", "leicht"),
+        ("Eis", "Es wird meistens kalt gegessen.", "leicht"),
+        ("Nudeln", "Es gibt sie in sehr vielen Formen.", "leicht"),
+        ("Kuchen", "Man bekommt ihn häufig bei Feiern.", "leicht"),
+        ("Popcorn", "Man sieht es häufig im Kino.", "leicht"),
+    ],
+
+    "Tiere": [
+        ("Hund", "Viele Menschen halten ihn als Haustier.", "leicht"),
+        ("Katze", "Sie kann sehr eigenständig sein.", "leicht"),
+        ("Pinguin", "Er kann nicht normal fliegen.", "mittel"),
+        ("Elefant", "Er ist für seine Größe bekannt.", "mittel"),
+        ("Löwe", "Er wird oft als König der Tiere bezeichnet.", "mittel"),
+        ("Hai", "Er lebt im Wasser.", "leicht"),
+        ("Adler", "Er kann hoch über dem Boden fliegen.", "mittel"),
+        ("Delfin", "Er lebt im Wasser und gilt als sehr intelligent.", "mittel"),
+        ("Pferd", "Menschen können auf ihm reiten.", "leicht"),
+        ("Frosch", "Er kann springen und lebt oft in der Nähe von Wasser.", "leicht"),
+    ],
+
+    "Gaming": [
+        ("Minecraft", "Man kann dort eine Welt aus Blöcken bauen.", "leicht"),
+        ("Fortnite", "Ein bekannter Battle-Royale-Titel.", "leicht"),
+        ("PlayStation", "Eine bekannte Gaming-Plattform.", "leicht"),
+        ("Controller", "Man benutzt ihn häufig zum Spielen.", "leicht"),
+        ("Boss", "Er ist in vielen Spielen stärker als normale Gegner.", "mittel"),
+        ("Skin", "Er verändert häufig das Aussehen einer Figur.", "mittel"),
+        ("Server", "Viele Spieler können sich dort treffen.", "mittel"),
+        ("Lobby", "Dort warten Spieler häufig vor einer Runde.", "mittel"),
+        ("Respawn", "Danach ist eine Spielfigur wieder da.", "schwer"),
+        ("Level", "Davon gibt es in vielen Spielen mehrere.", "leicht"),
+    ],
+
+    "Sport": [
+        ("Fußball", "Man spielt ihn meistens mit einem Ball.", "leicht"),
+        ("Basketball", "Ein Ball soll in ein Ziel gelangen.", "leicht"),
+        ("Tennis", "Ein Netz befindet sich zwischen den Spielern.", "leicht"),
+        ("Torwart", "Er darf im Fußball normalerweise den Ball mit den Händen spielen.", "mittel"),
+        ("Schiedsrichter", "Er entscheidet über Regelverstöße.", "mittel"),
+        ("Stadion", "Viele Zuschauer können dort Sport sehen.", "leicht"),
+        ("Elfmeter", "Eine Standardsituation im Fußball.", "mittel"),
+        ("Training", "Sportler machen es regelmäßig.", "leicht"),
+        ("Pokal", "Man kann ihn nach einem Wettbewerb gewinnen.", "leicht"),
+        ("Trikot", "Sportler tragen es häufig während eines Spiels.", "leicht"),
+    ],
+
+    "Schule": [
+        ("Tafel", "Darauf kann ein Lehrer etwas schreiben.", "leicht"),
+        ("Hausaufgaben", "Sie werden häufig nach dem Unterricht gemacht.", "leicht"),
+        ("Klausur", "Dabei wird Wissen geprüft.", "mittel"),
+        ("Pausenhof", "Schüler halten sich dort oft in den Pausen auf.", "leicht"),
+        ("Rucksack", "Viele Schüler nehmen ihn mit zur Schule.", "leicht"),
+        ("Lehrer", "Er unterrichtet Schüler.", "leicht"),
+        ("Klassenarbeit", "Sie findet während des Unterrichts statt.", "mittel"),
+        ("Stundenplan", "Er zeigt, was wann stattfindet.", "leicht"),
+        ("Kreide", "Damit kann man auf bestimmten Tafeln schreiben.", "mittel"),
+        ("Schulbus", "Er bringt Schüler zur Schule oder nach Hause.", "leicht"),
+    ],
+
+    "Unterhaltung": [
+        ("Film", "Man schaut ihn meistens auf einem Bildschirm.", "leicht"),
+        ("Kino", "Dort schaut man Filme auf großer Leinwand.", "leicht"),
+        ("Serie", "Sie besteht normalerweise aus mehreren Folgen.", "leicht"),
+        ("YouTube", "Dort kann man viele Videos anschauen.", "leicht"),
+        ("Streamer", "Er überträgt häufig live.", "mittel"),
+        ("Schauspieler", "Er spielt eine Rolle.", "mittel"),
+        ("Musik", "Man kann sie hören.", "leicht"),
+        ("Konzert", "Dort treten Musiker vor Publikum auf.", "leicht"),
+        ("Anime", "Eine Form animierter Unterhaltung.", "mittel"),
+        ("Superheld", "Er besitzt häufig besondere Fähigkeiten.", "leicht"),
+    ],
+
+    "Welt": [
+        ("Paris", "Eine bekannte europäische Stadt.", "mittel"),
+        ("New York", "Eine sehr bekannte Großstadt.", "mittel"),
+        ("London", "Eine europäische Hauptstadt.", "mittel"),
+        ("Deutschland", "Ein Land in Europa.", "leicht"),
+        ("Japan", "Ein Inselstaat in Asien.", "mittel"),
+        ("Wüste", "Dort fällt häufig sehr wenig Regen.", "leicht"),
+        ("Ozean", "Davon gibt es mehrere auf der Erde.", "leicht"),
+        ("Berg", "Er kann sehr hoch sein.", "leicht"),
+        ("Flughafen", "Dort starten und landen Flugzeuge.", "leicht"),
+        ("Hotel", "Dort können Menschen übernachten.", "leicht"),
+    ],
+
+    "Chaos": [
+        ("Meme", "Im Internet wird es häufig geteilt.", "leicht"),
+        ("Kopfhörer", "Man trägt sie häufig am Kopf.", "leicht"),
+        ("Roboter", "Er kann Aufgaben automatisch erledigen.", "leicht"),
+        ("Alien", "Eine mögliche Lebensform außerhalb der Erde.", "mittel"),
+        ("Zeitmaschine", "Damit könnte man theoretisch durch die Zeit reisen.", "schwer"),
+        ("Ninja", "Eine Figur, die oft mit Heimlichkeit verbunden wird.", "mittel"),
+        ("Drache", "Ein bekanntes Fabelwesen.", "leicht"),
+        ("Geist", "Ein übernatürliches Wesen.", "leicht"),
+        ("Rakete", "Sie kann ins Weltall fliegen.", "leicht"),
+        ("Detektiv", "Er versucht häufig Geheimnisse zu lösen.", "leicht"),
+    ]
+}
+
+
+IMPOSTER_CATEGORIES = list(
+    IMPOSTER_WORDS.keys()
+)
+
+
+# ------------------------------------------------------------
+# HILFSFUNKTIONEN
+# ------------------------------------------------------------
+
+def imposter_game(guild_id: int) -> Optional[dict]:
+    return IMPOSTER_GAMES.get(guild_id)
+
+
+def imposter_player_count(game: dict) -> int:
+    return len(game.get("players", {}))
+
+
+def imposter_allowed_count(player_count: int) -> list[int]:
+
+    if player_count < 3:
+        return []
+
+    if player_count == 3:
+        return [1]
+
+    if player_count == 4:
+        return [1, 2]
+
+    return [1, 2, 3]
+
+
+def imposter_random_word(
+    category: str,
+    difficulty: str
+):
+
+    words = IMPOSTER_WORDS.get(
+        category,
+        []
+    )
+
+    if not words:
+        words = [
+            item
+            for values in IMPOSTER_WORDS.values()
+            for item in values
+        ]
+
+    matching = [
+        item
+        for item in words
+        if item[2] == difficulty
+    ]
+
+    if not matching:
+        matching = words
+
+    return random.choice(
+        matching
+    )
+
+
+def imposter_embed(
+    game: dict
+) -> discord.Embed:
+
+    players = game.get(
+        "players",
+        {}
+    )
+
+    player_lines = []
+
+    for user_id, data in players.items():
+
+        status = (
+            "🟢"
+            if data.get("accepted")
+            else "🟡"
+        )
+
+        member = game["guild"].get_member(
+            int(user_id)
+        )
+
+        if member:
+            player_lines.append(
+                f"{status} {member.mention}"
+            )
+
+    if not player_lines:
+        player_lines.append(
+            "Noch niemand beigetreten."
+        )
+
+    allowed = imposter_allowed_count(
+        len(players)
+    )
+
+    imposter_text = (
+        ", ".join(
+            str(x)
+            for x in allowed
+        )
+        if allowed
+        else "—"
+    )
+
+    embed = discord.Embed(
+        title="🎭 WER IST DER IMPOSTER?",
+        description=(
+            "Eine neue Runde wurde erstellt!\n\n"
+            "Alle Spieler müssen die Einladung "
+            "annehmen, bevor die Runde gestartet "
+            "werden kann."
+        ),
+        color=discord.Color.blurple()
+    )
+
+    embed.add_field(
+        name="👥 Spieler",
+        value=(
+            f"**{len(players)}** Spieler\n\n"
+            + "\n".join(player_lines)
+        )[:1024],
+        inline=False
+    )
+
+    embed.add_field(
+        name="🎯 Kategorie",
+        value=game.get(
+            "category",
+            "Alltag"
+        ),
+        inline=True
+    )
+
+    embed.add_field(
+        name="🔴 Imposter",
+        value=imposter_text,
+        inline=True
+    )
+
+    embed.add_field(
+        name="⏱️ Diskussion",
+        value=f"{game.get('discussion_time', 60)} Sekunden",
+        inline=True
+    )
+
+    embed.add_field(
+        name="🗳️ Abstimmung",
+        value=f"{game.get('voting_time', 45)} Sekunden",
+        inline=True
+    )
+
+    embed.add_field(
+        name="💡 Hinweise",
+        value=(
+            "✅ Aktiv"
+            if game.get("hints", True)
+            else "❌ Aus"
+        ),
+        inline=True
+    )
+
+    embed.add_field(
+        name="⚡ Status",
+        value=game.get(
+            "status",
+            "Lobby"
+        ),
+        inline=True
+    )
+
+    embed.set_footer(
+        text="ReVu • Imposter Game"
+    )
+
+    return embed
+
+
+# ------------------------------------------------------------
+# EINLADUNG
+# ------------------------------------------------------------
+
+class ImposterInviteView(
+    discord.ui.View
+):
+
+    def __init__(
+        self,
+        guild_id: int,
+        user_id: int
+    ):
+
+        super().__init__(
+            timeout=120
+        )
+
+        self.guild_id = guild_id
+        self.user_id = user_id
+        self.finished = False
+
+    async def interaction_check(
+        self,
+        interaction: discord.Interaction
+    ):
+
+        if interaction.user.id != self.user_id:
+
+            await interaction.response.send_message(
+                "❌ Diese Einladung gehört nicht dir.",
+                ephemeral=True
+            )
+
+            return False
+
+        return True
+
+    @discord.ui.button(
+        label="Annehmen",
+        emoji="🎮",
+        style=discord.ButtonStyle.success
+    )
+    async def accept(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+
+        game = imposter_game(
+            self.guild_id
+        )
+
+        if not game:
+
+            await interaction.response.edit_message(
+                content="❌ Die Lobby existiert nicht mehr.",
+                embed=None,
+                view=None
+            )
+
+            return
+
+        player = game["players"].get(
+            str(self.user_id)
+        )
+
+        if not player:
+
+            await interaction.response.edit_message(
+                content="❌ Du bist nicht mehr für diese Runde vorgesehen.",
+                embed=None,
+                view=None
+            )
+
+            return
+
+        player["accepted"] = True
+
+        await interaction.response.edit_message(
+            content=(
+                "✅ **Du bist dabei!**\n\n"
+                "Warte, bis der Ersteller die Runde startet."
+            ),
+            embed=None,
+            view=None
+        )
+
+        await imposter_update_lobby(
+            game
+        )
+
+    @discord.ui.button(
+        label="Ablehnen",
+        emoji="❌",
+        style=discord.ButtonStyle.danger
+    )
+    async def decline(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+
+        game = imposter_game(
+            self.guild_id
+        )
+
+        if game:
+
+            game["players"].pop(
+                str(self.user_id),
+                None
+            )
+
+            await imposter_update_lobby(
+                game
+            )
+
+        await interaction.response.edit_message(
+            content="❌ **Einladung abgelehnt.**",
+            embed=None,
+            view=None
+        )
+
+
+# ------------------------------------------------------------
+# EINSTELLUNGEN
+# ------------------------------------------------------------
+
+class ImposterSettingsView(
+    discord.ui.View
+):
+
+    def __init__(
+        self,
+        game: dict,
+        owner_id: int
+    ):
+
+        super().__init__(
+            timeout=300
+        )
+
+        self.game = game
+        self.owner_id = owner_id
+
+        self.category_select = discord.ui.Select(
+            placeholder="🎯 Kategorie auswählen",
+            options=[
+                discord.SelectOption(
+                    label=category,
+                    value=category,
+                    default=(
+                        category
+                        == game.get(
+                            "category",
+                            "Alltag"
+                        )
+                    )
+                )
+                for category in IMPOSTER_CATEGORIES
+            ]
+        )
+
+        self.category_select.callback = (
+            self.category_callback
+        )
+
+        self.add_item(
+            self.category_select
+        )
+
+        self.imposter_select = discord.ui.Select(
+            placeholder="🔴 Anzahl Imposter",
+            options=[
+                discord.SelectOption(
+                    label="Automatisch",
+                    value="auto"
+                ),
+                discord.SelectOption(
+                    label="1 Imposter",
+                    value="1"
+                ),
+                discord.SelectOption(
+                    label="2 Imposter",
+                    value="2"
+                ),
+                discord.SelectOption(
+                    label="3 Imposter",
+                    value="3"
+                )
+            ]
+        )
+
+        self.imposter_select.callback = (
+            self.imposter_callback
+        )
+
+        self.add_item(
+            self.imposter_select
+        )
+
+        self.difficulty_select = discord.ui.Select(
+            placeholder="🧠 Schwierigkeit",
+            options=[
+                discord.SelectOption(
+                    label="Leicht",
+                    value="leicht"
+                ),
+                discord.SelectOption(
+                    label="Mittel",
+                    value="mittel"
+                ),
+                discord.SelectOption(
+                    label="Schwer",
+                    value="schwer"
+                )
+            ]
+        )
+
+        self.difficulty_select.callback = (
+            self.difficulty_callback
+        )
+
+        self.add_item(
+            self.difficulty_select
+        )
+
+    async def interaction_check(
+        self,
+        interaction
+    ):
+
+        if interaction.user.id != self.owner_id:
+
+            await interaction.response.send_message(
+                "❌ Nur der Ersteller kann die Einstellungen ändern.",
+                ephemeral=True
+            )
+
+            return False
+
+        return True
+
+    async def category_callback(
+        self,
+        interaction
+    ):
+
+        self.game["category"] = (
+            self.category_select.values[0]
+        )
+
+        await interaction.response.edit_message(
+            embed=imposter_settings_embed(
+                self.game
+            ),
+            view=self
+        )
+
+    async def imposter_callback(
+        self,
+        interaction
+    ):
+
+        value = self.imposter_select.values[0]
+
+        self.game["imposter_setting"] = value
+
+        await interaction.response.edit_message(
+            embed=imposter_settings_embed(
+                self.game
+            ),
+            view=self
+        )
+
+    async def difficulty_callback(
+        self,
+        interaction
+    ):
+
+        self.game["difficulty"] = (
+            self.difficulty_select.values[0]
+        )
+
+        await interaction.response.edit_message(
+            embed=imposter_settings_embed(
+                self.game
+            ),
+            view=self
+        )
+
+    @discord.ui.button(
+        label="💡 Hinweise AN/AUS",
+        style=discord.ButtonStyle.secondary
+    )
+    async def hints(
+        self,
+        interaction,
+        button
+    ):
+
+        self.game["hints"] = not self.game.get(
+            "hints",
+            True
+        )
+
+        await interaction.response.edit_message(
+            embed=imposter_settings_embed(
+                self.game
+            ),
+            view=self
+        )
+
+    @discord.ui.button(
+        label="❌ Schließen",
+        style=discord.ButtonStyle.danger
+    )
+    async def close(
+        self,
+        interaction,
+        button
+    ):
+
+        await interaction.response.edit_message(
+            content="⚙️ Einstellungen gespeichert.",
+            embed=None,
+            view=None
+        )
+
+
+def imposter_settings_embed(
+    game: dict
+) -> discord.Embed:
+
+    embed = discord.Embed(
+        title="⚙️ Imposter-Einstellungen",
+        description=(
+            "Passe die Runde an, bevor sie gestartet wird."
+        ),
+        color=discord.Color.blurple()
+    )
+
+    embed.add_field(
+        name="🎯 Kategorie",
+        value=game.get(
+            "category",
+            "Alltag"
+        ),
+        inline=True
+    )
+
+    imposter_setting = game.get(
+        "imposter_setting",
+        "auto"
+    )
+
+    embed.add_field(
+        name="🔴 Imposter",
+        value=(
+            "Automatisch"
+            if imposter_setting == "auto"
+            else f"{imposter_setting} Imposter"
+        ),
+        inline=True
+    )
+
+    embed.add_field(
+        name="🧠 Schwierigkeit",
+        value=game.get(
+            "difficulty",
+            "mittel"
+        ).capitalize(),
+        inline=True
+    )
+
+    embed.add_field(
+        name="💡 Hinweise",
+        value=(
+            "✅ Aktiv"
+            if game.get("hints", True)
+            else "❌ Aus"
+        ),
+        inline=True
+    )
+
+    return embed
+
+
+# ------------------------------------------------------------
+# LOBBY VIEW
+# ------------------------------------------------------------
+
+class ImposterLobbyView(
+    discord.ui.View
+):
+
+    def __init__(
+        self,
+        game: dict
+    ):
+
+        super().__init__(
+            timeout=600
+        )
+
+        self.game = game
+
+    async def interaction_check(
+        self,
+        interaction
+    ):
+
+        if interaction.user.id != self.game["owner_id"]:
+
+            await interaction.response.send_message(
+                "❌ Nur der Ersteller kann die Lobby verwalten.",
+                ephemeral=True
+            )
+
+            return False
+
+        return True
+
+    @discord.ui.button(
+        label="⚙️ Einstellungen",
+        style=discord.ButtonStyle.secondary
+    )
+    async def settings(
+        self,
+        interaction,
+        button
+    ):
+
+        await interaction.response.send_message(
+            embed=imposter_settings_embed(
+                self.game
+            ),
+            view=ImposterSettingsView(
+                self.game,
+                self.game["owner_id"]
+            ),
+            ephemeral=True
+        )
+
+    @discord.ui.button(
+        label="▶️ Starten",
+        style=discord.ButtonStyle.success
+    )
+    async def start(
+        self,
+        interaction,
+        button
+    ):
+
+        players = [
+            data
+            for data in self.game["players"].values()
+            if data.get("accepted")
+        ]
+
+        if len(players) < 3:
+
+            await interaction.response.send_message(
+                "❌ Du brauchst mindestens **3 angenommene Spieler**.",
+                ephemeral=True
+            )
+
+            return
+
+        await interaction.response.defer()
+
+        await imposter_start_game(
+            self.game
+        )
+
+        try:
+            await interaction.edit_original_response(
+                embed=imposter_embed(
+                    self.game
+                ),
+                view=None
+            )
+        except Exception:
+            pass
+
+    @discord.ui.button(
+        label="🛑 Abbrechen",
+        style=discord.ButtonStyle.danger
+    )
+    async def cancel(
+        self,
+        interaction,
+        button
+    ):
+
+        await interaction.response.edit_message(
+            content="🛑 **Imposter-Spiel abgebrochen.**",
+            embed=None,
+            view=None
+        )
+
+        await imposter_cleanup(
+            self.game
+        )
+
+
+# ------------------------------------------------------------
+# LOBBY AKTUALISIEREN
+# ------------------------------------------------------------
+
+async def imposter_update_lobby(
+    game: dict
+):
+
+    message = game.get(
+        "lobby_message"
+    )
+
+    if not message:
+        return
+
+    try:
+
+        await message.edit(
+            embed=imposter_embed(
+                game
+            ),
+            view=ImposterLobbyView(
+                game
+            )
+        )
+
+    except Exception as error:
+
+        print(
+            f"[IMPOSTER] Lobby konnte nicht aktualisiert werden: "
+            f"{error!r}"
+        )
+
+
+# ------------------------------------------------------------
+# VC CHANNEL ERSTELLEN
+# ------------------------------------------------------------
+
+async def imposter_create_voice_channel(
+    game: dict
+):
+
+    guild = game["guild"]
+
+    overwrites = {}
+
+    # Jeder darf den Channel sehen.
+    overwrites[
+        guild.default_role
+    ] = discord.PermissionOverwrite(
+        view_channel=True,
+        connect=False
+    )
+
+    # Bot darf alles Notwendige.
+    bot_member = guild.me
+
+    if bot_member:
+
+        overwrites[
+            bot_member
+        ] = discord.PermissionOverwrite(
+            view_channel=True,
+            connect=True,
+            speak=True,
+            move_members=True,
+            manage_channels=True
+        )
+
+    # Admin/Ersteller darf immer rein.
+    owner = guild.get_member(
+        game["owner_id"]
+    )
+
+    if owner:
+
+        overwrites[
+            owner
+        ] = discord.PermissionOverwrite(
+            view_channel=True,
+            connect=True,
+            speak=True
+        )
+
+    # Teilnehmer dürfen rein.
+    for user_id, player in game["players"].items():
+
+        if not player.get("accepted"):
+            continue
+
+        member = guild.get_member(
+            int(user_id)
+        )
+
+        if not member:
+            continue
+
+        overwrites[
+            member
+        ] = discord.PermissionOverwrite(
+            view_channel=True,
+            connect=True,
+            speak=True
+        )
+
+    category = None
+
+    try:
+
+        category = guild.get_channel(
+            int(
+                game["voice_category_id"]
+            )
+        ) if game.get("voice_category_id") else None
+
+    except Exception:
+        category = None
+
+    channel = await guild.create_voice_channel(
+        "🔴・WER IST DER IMPOSTER",
+        category=category,
+        overwrites=overwrites,
+        reason="Imposter Game"
+    )
+
+    game[
+        "voice_channel_id"
+    ] = channel.id
+
+    return channel
+
+
+# ------------------------------------------------------------
+# SPIEL STARTEN
+# ------------------------------------------------------------
+
+async def imposter_start_game(
+    game: dict
+):
+
+    if game.get("status") == "running":
+        return
+
+    guild = game["guild"]
+
+    accepted_players = [
+        data
+        for data in game["players"].values()
+        if data.get("accepted")
+    ]
+
+    if len(accepted_players) < 3:
+        return
+
+    game["status"] = "running"
+
+    # --------------------------------------------------------
+    # IMPOSTER ANZAHL
+    # --------------------------------------------------------
+
+    allowed = imposter_allowed_count(
+        len(accepted_players)
+    )
+
+    setting = game.get(
+        "imposter_setting",
+        "auto"
+    )
+
+    if setting == "auto":
+
+        imposter_count = random.choice(
+            allowed
+        )
+
+    else:
+
+        try:
+            imposter_count = int(
+                setting
+            )
+        except Exception:
+            imposter_count = 1
+
+        if imposter_count not in allowed:
+
+            imposter_count = max(
+                allowed
+            )
+
+    game[
+        "imposter_count"
+    ] = imposter_count
+
+    # --------------------------------------------------------
+    # WORT
+    # --------------------------------------------------------
+
+    category = game.get(
+        "category",
+        "Alltag"
+    )
+
+    difficulty = game.get(
+        "difficulty",
+        "mittel"
+    )
+
+    word, hint, word_difficulty = (
+        imposter_random_word(
+            category,
+            difficulty
+        )
+    )
+
+    game[
+        "word"
+    ] = word
+
+    game[
+        "hint"
+    ] = hint
+
+    game[
+        "word_difficulty"
+    ] = word_difficulty
+
+    # --------------------------------------------------------
+    # SPIELER
+    # --------------------------------------------------------
+
+    player_ids = [
+        int(data["user_id"])
+        for data in accepted_players
+    ]
+
+    imposters = set(
+        random.sample(
+            player_ids,
+            imposter_count
+        )
+    )
+
+    game[
+        "imposters"
+    ] = imposters
+
+    # --------------------------------------------------------
+    # VOICE CHANNEL
+    # --------------------------------------------------------
+
+    voice_channel = await imposter_create_voice_channel(
+        game
+    )
+
+    # Originale Voice-Channels merken.
+    for user_id in player_ids:
+
+        member = guild.get_member(
+            user_id
+        )
+
+        if not member:
+            continue
+
+        game["players"][
+            str(user_id)
+        ][
+            "original_voice_id"
+        ] = (
+            member.voice.channel.id
+            if member.voice
+            and member.voice.channel
+            else None
+        )
+
+    # --------------------------------------------------------
+    # SPIELER VERSCHIEBEN
+    # --------------------------------------------------------
+
+    for user_id in player_ids:
+
+        member = guild.get_member(
+            user_id
+        )
+
+        if not member:
+            continue
+
+        try:
+
+            if member.voice:
+
+                await member.move_to(
+                    voice_channel,
+                    reason="Imposter Game gestartet"
+                )
+
+        except Exception as error:
+
+            print(
+                f"[IMPOSTER] Voice Move Fehler "
+                f"{member}: {error!r}"
+            )
+
+    # --------------------------------------------------------
+    # GEHEIME ROLLEN SENDEN
+    # --------------------------------------------------------
+
+    for user_id in player_ids:
+
+        member = guild.get_member(
+            user_id
+        )
+
+        if not member:
+            continue
+
+        is_imposter = user_id in imposters
+
+        if is_imposter:
+
+            other_imposters = [
+                guild.get_member(
+                    other_id
+                )
+                for other_id in imposters
+                if other_id != user_id
+            ]
+
+            other_names = [
+                member_.display_name
+                for member_ in other_imposters
+                if member_
+            ]
+
+            others_text = (
+                ", ".join(other_names)
+                if other_names
+                else "Du bist der einzige Imposter."
+            )
+
+            embed = discord.Embed(
+                title="🕵️ DEINE ROLLE",
+                description=(
+                    "## 🔴 DU BIST DER IMPOSTER\n\n"
+                    "Du kennst das geheime Wort **nicht**.\n\n"
+                    "Versuche anhand der Hinweise herauszufinden, "
+                    "welches Wort die anderen kennen.\n\n"
+                    "### 🤝 Deine Mit-Imposter\n"
+                    f"{others_text}\n\n"
+                    "💡 **Dein Hinweis:**\n"
+                    f"{hint}"
+                ),
+                color=discord.Color.red()
+            )
+
+        else:
+
+            embed = discord.Embed(
+                title="🔐 DEINE ROLLE",
+                description=(
+                    "## 👤 DU BIST SPIELER\n\n"
+                    "### 🔑 Dein geheimes Wort\n"
+                    f"## **{word}**\n\n"
+                    "⚠️ Sag das Wort niemals direkt!\n"
+                    "Gib stattdessen clevere Hinweise."
+                ),
+                color=discord.Color.green()
+            )
+
+        embed.add_field(
+            name="🎯 Kategorie",
+            value=category,
+            inline=True
+        )
+
+        embed.add_field(
+            name="🧠 Schwierigkeit",
+            value=difficulty.capitalize(),
+            inline=True
+        )
+
+        embed.set_footer(
+            text="ReVu • Imposter Game"
+        )
+
+        try:
+
+            await member.send(
+                embed=embed
+            )
+
+        except discord.Forbidden:
+
+            print(
+                f"[IMPOSTER] DMs deaktiviert bei {member}"
+            )
+
+        except Exception as error:
+
+            print(
+                f"[IMPOSTER] DM Fehler bei {member}: {error!r}"
+            )
+
+    # --------------------------------------------------------
+    # STARTNACHRICHT
+    # --------------------------------------------------------
+
+    text_channel = game.get(
+        "text_channel"
+    )
+
+    if text_channel:
+
+        embed = discord.Embed(
+            title="🎭 DIE RUNDE BEGINNT!",
+            description=(
+                "Alle Spieler wurden in den "
+                f"Voice-Channel {voice_channel.mention} verschoben.\n\n"
+                "🔐 **Die Rollen wurden per DM verschickt.**\n\n"
+                "🎙️ Sprecht euch jetzt ab und gebt Hinweise, "
+                "ohne das geheime Wort direkt zu nennen.\n\n"
+                f"⏱️ Diskussionszeit: "
+                f"**{game.get('discussion_time', 60)} Sekunden**"
+            ),
+            color=discord.Color.red()
+        )
+
+        embed.set_footer(
+            text="ReVu • Imposter Game"
+        )
+
+        game[
+            "game_message"
+        ] = await text_channel.send(
+            embed=embed,
+            view=ImposterGameControlView(
+                game
+            )
+        )
+
+    # Diskussion starten.
+    asyncio.create_task(
+        imposter_discussion_timer(
+            game
+        )
+    )
+
+
+# ------------------------------------------------------------
+# SPIEL-CONTROL
+# ------------------------------------------------------------
+
+class ImposterGameControlView(
+    discord.ui.View
+):
+
+    def __init__(
+        self,
+        game: dict
+    ):
+
+        super().__init__(
+            timeout=None
+        )
+
+        self.game = game
+
+    async def interaction_check(
+        self,
+        interaction
+    ):
+
+        participant_ids = {
+            int(user_id)
+            for user_id, data
+            in self.game["players"].items()
+            if data.get("accepted")
+        }
+
+        if interaction.user.id not in participant_ids:
+
+            await interaction.response.send_message(
+                "❌ Du bist kein Teilnehmer dieser Runde.",
+                ephemeral=True
+            )
+
+            return False
+
+        return True
+
+    @discord.ui.button(
+        label="🗳️ Abstimmung starten",
+        style=discord.ButtonStyle.primary
+    )
+    async def vote(
+        self,
+        interaction,
+        button
+    ):
+
+        if self.game.get("phase") != "discussion":
+
+            await interaction.response.send_message(
+                "❌ Die Abstimmung ist momentan nicht verfügbar.",
+                ephemeral=True
+            )
+
+            return
+
+        await imposter_begin_voting(
+            self.game
+        )
+
+        await interaction.response.send_message(
+            "🗳️ **Die geheime Abstimmung wurde gestartet.**",
+            ephemeral=True
+        )
+
+    @discord.ui.button(
+        label="🛑 Spiel abbrechen",
+        style=discord.ButtonStyle.danger
+    )
+    async def stop(
+        self,
+        interaction,
+        button
+    ):
+
+        if interaction.user.id != self.game["owner_id"]:
+
+            await interaction.response.send_message(
+                "❌ Nur der Ersteller kann das Spiel abbrechen.",
+                ephemeral=True
+            )
+
+            return
+
+        await interaction.response.send_message(
+            "🛑 Spiel wird beendet.",
+            ephemeral=True
+        )
+
+        await imposter_cleanup(
+            self.game
+        )
+
+
+# ------------------------------------------------------------
+# DISKUSSIONS-TIMER
+# ------------------------------------------------------------
+
+async def imposter_discussion_timer(
+    game: dict
+):
+
+    game[
+        "phase"
+    ] = "discussion"
+
+    seconds = int(
+        game.get(
+            "discussion_time",
+            60
+        )
+    )
+
+    await asyncio.sleep(
+        seconds
+    )
+
+    if game.get(
+        "status"
+    ) != "running":
+
+        return
+
+    if game.get(
+        "phase"
+    ) != "discussion":
+
+        return
+
+    await imposter_begin_voting(
+        game
+    )
+
+
+# ------------------------------------------------------------
+# ABSTIMMUNG
+# ------------------------------------------------------------
+
+class ImposterVoteSelect(
+    discord.ui.Select
+):
+
+    def __init__(
+        self,
+        game: dict
+    ):
+
+        self.game = game
+
+        options = []
+
+        for user_id, data in game["players"].items():
+
+            if not data.get("accepted"):
+                continue
+
+            member = game["guild"].get_member(
+                int(user_id)
+            )
+
+            if not member:
+                continue
+
+            options.append(
+                discord.SelectOption(
+                    label=member.display_name[:100],
+                    value=str(member.id)
+                )
+            )
+
+        super().__init__(
+            placeholder="🗳️ Wähle den Imposter...",
+            options=options[:25],
+            min_values=1,
+            max_values=1
+        )
+
+    async def callback(
+        self,
+        interaction
+    ):
+
+        user_id = interaction.user.id
+
+        if user_id not in self.game["votes"]:
+
+            self.game["votes"][
+                user_id
+            ] = int(
+                self.values[0]
+            )
+
+            await interaction.response.send_message(
+                "✅ Deine Stimme wurde geheim gespeichert.",
+                ephemeral=True
+            )
+
+        else:
+
+            await interaction.response.send_message(
+                "ℹ️ Du hast bereits abgestimmt.",
+                ephemeral=True
+            )
+
+        participants = [
+            int(user_id)
+            for user_id, data
+            in self.game["players"].items()
+            if data.get("accepted")
+        ]
+
+        if len(
+            self.game["votes"]
+        ) >= len(participants):
+
+            await imposter_finish_voting(
+                self.game
+            )
+
+
+class ImposterVoteView(
+    discord.ui.View
+):
+
+    def __init__(
+        self,
+        game: dict
+    ):
+
+        super().__init__(
+            timeout=game.get(
+                "voting_time",
+                45
+            )
+        )
+
+        self.game = game
+
+        self.add_item(
+            ImposterVoteSelect(
+                game
+            )
+        )
+
+    async def on_timeout(
+        self
+    ):
+
+        if self.game.get(
+            "phase"
+        ) != "voting":
+
+            return
+
+        await imposter_finish_voting(
+            self.game
+        )
+
+
+async def imposter_begin_voting(
+    game: dict
+):
+
+    if game.get(
+        "phase"
+    ) == "voting":
+
+        return
+
+    game[
+        "phase"
+    ] = "voting"
+
+    game[
+        "votes"
+    ] = {}
+
+    text_channel = game.get(
+        "text_channel"
+    )
+
+    if not text_channel:
+        return
+
+    embed = discord.Embed(
+        title="🗳️ ABSTIMMUNG",
+        description=(
+            "## Wer ist der Imposter?\n\n"
+            "Wähle **heimlich** die Person aus, "
+            "die du für den Imposter hältst.\n\n"
+            "🔒 Deine Stimme wird niemandem angezeigt.\n\n"
+            f"⏱️ Zeit: **{game.get('voting_time', 45)} Sekunden**"
+        ),
+        color=discord.Color.blurple()
+    )
+
+    message = await text_channel.send(
+        embed=embed
+    )
+
+    # Jeder Teilnehmer bekommt seine eigene geheime Abstimmung.
+    for user_id, data in game["players"].items():
+
+        if not data.get("accepted"):
+            continue
+
+        member = game["guild"].get_member(
+            int(user_id)
+        )
+
+        if not member:
+            continue
+
+        try:
+
+            await member.send(
+                embed=embed,
+                view=ImposterVoteView(
+                    game
+                )
+            )
+
+        except Exception as error:
+
+            print(
+                f"[IMPOSTER] Vote-DM Fehler: {error!r}"
+            )
+
+    # Zusätzlich öffentlich erklären.
+    try:
+
+        await message.edit(
+            embed=embed
+        )
+
+    except Exception:
+        pass
+
+
+# ------------------------------------------------------------
+# ABSTIMMUNG AUSWERTEN
+# ------------------------------------------------------------
+
+async def imposter_finish_voting(
+    game: dict
+):
+
+    if game.get(
+        "_voting_finished"
+    ):
+        return
+
+    game[
+        "_voting_finished"
+    ] = True
+
+    game[
+        "phase"
+    ] = "reveal"
+
+    votes = game.get(
+        "votes",
+        {}
+    )
+
+    if not votes:
+
+        await imposter_reveal(
+            game,
+            None,
+            0
+        )
+
+        return
+
+    counts = {}
+
+    for target_id in votes.values():
+
+        counts[target_id] = (
+            counts.get(
+                target_id,
+                0
+            )
+            + 1
+        )
+
+    highest = max(
+        counts.values()
+    )
+
+    winners = [
+        user_id
+        for user_id, count
+        in counts.items()
+        if count == highest
+    ]
+
+    # Gleichstand.
+    if len(winners) != 1:
+
+        game[
+            "tie"
+        ] = True
+
+        await imposter_reveal(
+            game,
+            None,
+            highest
+        )
+
+        return
+
+    voted_user_id = winners[0]
+
+    await imposter_reveal(
+        game,
+        voted_user_id,
+        highest
+    )
+
+
+# ------------------------------------------------------------
+# LETZTE CHANCE
+# ------------------------------------------------------------
+
+class ImposterFinalGuessModal(
+    discord.ui.Modal
+):
+
+    def __init__(
+        self,
+        game: dict,
+        imposter_id: int
+    ):
+
+        super().__init__(
+            title="🧠 Letzte Chance"
+        )
+
+        self.game = game
+        self.imposter_id = imposter_id
+
+        self.answer = discord.ui.TextInput(
+            label="Wie lautet das geheime Wort?",
+            placeholder="Deine Vermutung...",
+            max_length=100,
+            required=True
+        )
+
+        self.add_item(
+            self.answer
+        )
+
+    async def on_submit(
+        self,
+        interaction
+    ):
+
+        guess = str(
+            self.answer.value
+        ).strip()
+
+        word = str(
+            self.game.get(
+                "word",
+                ""
+            )
+        ).strip()
+
+        if guess.casefold() == word.casefold():
+
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    title="🎯 RICHTIG!",
+                    description=(
+                        "Du hast das geheime Wort erraten!\n\n"
+                        f"🔑 Das Wort war: **{word}**\n\n"
+                        "## 🔴 DIE IMPOSTER GEWINNEN!"
+                    ),
+                    color=discord.Color.red()
+                )
+            )
+
+            self.game[
+                "winner"
+            ] = "imposter"
+
+        else:
+
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    title="❌ FALSCH!",
+                    description=(
+                        f"Deine Antwort **{guess}** war falsch.\n\n"
+                        f"🔑 Das Wort war: **{word}**\n\n"
+                        "## 🟢 DIE SPIELER GEWINNEN!"
+                    ),
+                    color=discord.Color.green()
+                )
+            )
+
+            self.game[
+                "winner"
+            ] = "players"
+
+        await imposter_finish_game(
+            self.game
+        )
+
+
+class ImposterFinalGuessView(
+    discord.ui.View
+):
+
+    def __init__(
+        self,
+        game: dict,
+        imposter_id: int
+    ):
+
+        super().__init__(
+            timeout=45
+        )
+
+        self.game = game
+        self.imposter_id = imposter_id
+
+    @discord.ui.button(
+        label="🧠 Wort erraten",
+        style=discord.ButtonStyle.danger
+    )
+    async def guess(
+        self,
+        interaction,
+        button
+    ):
+
+        if interaction.user.id != self.imposter_id:
+
+            await interaction.response.send_message(
+                "❌ Nur der erwischte Imposter darf raten.",
+                ephemeral=True
+            )
+
+            return
+
+        await interaction.response.send_modal(
+            ImposterFinalGuessModal(
+                self.game,
+                self.imposter_id
+            )
+        )
+
+
+# ------------------------------------------------------------
+# AUFLÖSUNG
+# ------------------------------------------------------------
+
+async def imposter_reveal(
+    game: dict,
+    voted_user_id: Optional[int],
+    votes: int
+):
+
+    guild = game["guild"]
+
+    voted_member = (
+        guild.get_member(
+            voted_user_id
+        )
+        if voted_user_id
+        else None
+    )
+
+    if game.get("tie"):
+
+        description = (
+            "## ⚖️ UNENTSCHIEDEN\n\n"
+            "Die höchste Stimmenanzahl war geteilt.\n\n"
+            "Niemand wurde eindeutig ausgewählt.\n\n"
+            "🔴 **Die Imposter gewinnen diese Runde!**"
+        )
+
+        winner = "imposter"
+
+    elif not voted_member:
+
+        description = (
+            "## ❌ NIEMAND WURDE AUSGEWÄHLT\n\n"
+            "Es wurde keine gültige Stimme abgegeben.\n\n"
+            "🔴 **Die Imposter gewinnen!**"
+        )
+
+        winner = "imposter"
+
+    else:
+
+        is_imposter = (
+            voted_user_id
+            in game.get(
+                "imposters",
+                set()
+            )
+        )
+
+        if is_imposter:
+
+            description = (
+                f"## 🎯 {voted_member.mention} WURDE ENTLARVT!\n\n"
+                f"**{votes}** Stimmen.\n\n"
+                "🔴 Die Person war tatsächlich ein Imposter!"
+            )
+
+            winner = None
+
+        else:
+
+            description = (
+                f"## ❌ FALSCHER VERDACHT!\n\n"
+                f"{voted_member.mention} wurde mit "
+                f"**{votes}** Stimmen gewählt.\n\n"
+                "Die Person war **kein Imposter**."
+            )
+
+            winner = "imposter"
+
+    embed = discord.Embed(
+        title="🎭 AUFLÖSUNG",
+        description=description,
+        color=(
+            discord.Color.red()
+            if winner == "imposter"
+            else discord.Color.orange()
+        )
+    )
+
+    embed.add_field(
+        name="🔑 Geheimes Wort",
+        value=f"**{game.get('word', 'Unbekannt')}**",
+        inline=True
+    )
+
+    if voted_member:
+
+        embed.add_field(
+            name="🗳️ Gewählt",
+            value=voted_member.mention,
+            inline=True
+        )
+
+    embed.add_field(
+        name="🔴 Imposter",
+        value="\n".join(
+            (
+                guild.get_member(
+                    int(user_id)
+                ).mention
+                if guild.get_member(
+                    int(user_id)
+                )
+                else f"`{user_id}`"
+            )
+            for user_id in game.get(
+                "imposters",
+                set()
+            )
+        ),
+        inline=False
+    )
+
+    text_channel = game.get(
+        "text_channel"
+    )
+
+    if text_channel:
+
+        await text_channel.send(
+            embed=embed
+        )
+
+    # Wenn ein Imposter erwischt wurde:
+    if (
+        voted_member
+        and voted_user_id in game.get(
+            "imposters",
+            set()
+        )
+    ):
+
+        game[
+            "caught_imposters"
+        ] = game.get(
+            "caught_imposters",
+            []
+        )
+
+        if voted_user_id not in game[
+            "caught_imposters"
+        ]:
+
+            game[
+                "caught_imposters"
+            ].append(
+                voted_user_id
+            )
+
+        # Letzte Chance per DM.
+        try:
+
+            await voted_member.send(
+                embed=discord.Embed(
+                    title="🧠 LETZTE CHANCE!",
+                    description=(
+                        "Du wurdest als Imposter entlarvt.\n\n"
+                        "Aber das Spiel ist noch nicht vorbei.\n\n"
+                        "Wenn du das geheime Wort errätst, "
+                        "gewinnen die Imposter trotzdem."
+                    ),
+                    color=discord.Color.red()
+                ),
+                view=ImposterFinalGuessView(
+                    game,
+                    voted_user_id
+                )
+            )
+
+            return
+
+        except Exception as error:
+
+            print(
+                f"[IMPOSTER] Final Guess DM Fehler: {error!r}"
+            )
+
+    if winner:
+
+        game[
+            "winner"
+        ] = winner
+
+        await imposter_finish_game(
+            game
+        )
+
+
+# ------------------------------------------------------------
+# SPIEL BEENDEN
+# ------------------------------------------------------------
+
+async def imposter_finish_game(
+    game: dict
+):
+
+    if game.get(
+        "_finished"
+    ):
+        return
+
+    game[
+        "_finished"
+    ] = True
+
+    winner = game.get(
+        "winner",
+        "players"
+    )
+
+    text_channel = game.get(
+        "text_channel"
+    )
+
+    if text_channel:
+
+        if winner == "imposter":
+
+            embed = discord.Embed(
+                title="🔴 DIE IMPOSTER GEWINNEN!",
+                description=(
+                    "Die Imposter konnten die Runde für sich entscheiden.\n\n"
+                    f"🔑 Das Wort war: **{game.get('word')}**"
+                ),
+                color=discord.Color.red()
+            )
+
+        else:
+
+            embed = discord.Embed(
+                title="🟢 DIE SPIELER GEWINNEN!",
+                description=(
+                    "Die Imposter wurden erfolgreich entlarvt.\n\n"
+                    f"🔑 Das Wort war: **{game.get('word')}**"
+                ),
+                color=discord.Color.green()
+            )
+
+        await text_channel.send(
+            embed=embed
+        )
+
+    await asyncio.sleep(
+        3
+    )
+
+    await imposter_cleanup(
+        game
+    )
+
+
+# ------------------------------------------------------------
+# AUFRÄUMEN
+# ------------------------------------------------------------
+
+async def imposter_cleanup(
+    game: dict
+):
+
+    guild = game.get(
+        "guild"
+    )
+
+    if not guild:
+        return
+
+    # Spieler zurück in ursprüngliche VCs.
+    for user_id, player in game.get(
+        "players",
+        {}
+    ).items():
+
+        if not player.get(
+            "accepted"
+        ):
+            continue
+
+        member = guild.get_member(
+            int(user_id)
+        )
+
+        if not member:
+            continue
+
+        original_id = player.get(
+            "original_voice_id"
+        )
+
+        if not original_id:
+            continue
+
+        original_channel = guild.get_channel(
+            int(original_id)
+        )
+
+        if not isinstance(
+            original_channel,
+            discord.VoiceChannel
+        ):
+            continue
+
+        try:
+
+            await member.move_to(
+                original_channel,
+                reason="Imposter Game beendet"
+            )
+
+        except Exception as error:
+
+            print(
+                f"[IMPOSTER] Rücktransfer Fehler "
+                f"{member}: {error!r}"
+            )
+
+    # Temporären VC löschen.
+    voice_id = game.get(
+        "voice_channel_id"
+    )
+
+    if voice_id:
+
+        channel = guild.get_channel(
+            int(voice_id)
+        )
+
+        if channel:
+
+            try:
+
+                await channel.delete(
+                    reason="Imposter Game beendet"
+                )
+
+            except Exception as error:
+
+                print(
+                    f"[IMPOSTER] VC konnte nicht gelöscht werden: "
+                    f"{error!r}"
+                )
+
+    # Spiel aus Speicher entfernen.
+    if IMPOSTER_GAMES.get(
+        guild.id
+    ) is game:
+
+        IMPOSTER_GAMES.pop(
+            guild.id,
+            None
+        )
+
+    print(
+        f"[IMPOSTER] Spiel beendet auf {guild.name}"
+    )
+
+
+# ------------------------------------------------------------
+# /IMPOSTER
+# ------------------------------------------------------------
+
+@bot.tree.command(
+    name="imposter",
+    description="Startet eine Runde Wer ist der Imposter?"
+)
+@app_commands.checks.has_permissions(
+    administrator=True
+)
+async def imposter(
+    interaction: discord.Interaction
+):
+
+    guild = interaction.guild
+
+    if guild is None:
+
+        await interaction.response.send_message(
+            "❌ Dieser Befehl funktioniert nur auf einem Server.",
+            ephemeral=True
+        )
+
+        return
+
+    # --------------------------------------------------------
+    # NUR EIN SPIEL PRO SERVER
+    # --------------------------------------------------------
+
+    if guild.id in IMPOSTER_GAMES:
+
+        await interaction.response.send_message(
+            "❌ Auf diesem Server läuft bereits ein Imposter-Spiel.",
+            ephemeral=True
+        )
+
+        return
+
+    # --------------------------------------------------------
+    # VOICE CHECK
+    # --------------------------------------------------------
+
+    if not isinstance(
+        interaction.user,
+        discord.Member
+    ):
+
+        await interaction.response.send_message(
+            "❌ Benutzer konnte nicht erkannt werden.",
+            ephemeral=True
+        )
+
+        return
+
+    if not interaction.user.voice:
+
+        await interaction.response.send_message(
+            "❌ Du musst in einem Voice-Channel sein, "
+            "um ein Imposter-Spiel zu starten.",
+            ephemeral=True
+        )
+
+        return
+
+    source_voice = interaction.user.voice.channel
+
+    if not isinstance(
+        source_voice,
+        discord.VoiceChannel
+    ):
+
+        await interaction.response.send_message(
+            "❌ Dieser Voice-Channel wird nicht unterstützt.",
+            ephemeral=True
+        )
+
+        return
+
+    # --------------------------------------------------------
+    # GAME STATE
+    # --------------------------------------------------------
+
+    game = {
+
+        "guild": guild,
+
+        "owner_id": interaction.user.id,
+
+        "text_channel": interaction.channel,
+
+        "source_voice_id": source_voice.id,
+
+        "voice_category_id": (
+            source_voice.category.id
+            if source_voice.category
+            else None
+        ),
+
+        "players": {},
+
+        "status": "Lobby",
+
+        "phase": "lobby",
+
+        "category": "Alltag",
+
+        "difficulty": "mittel",
+
+        "imposter_setting": "auto",
+
+        "imposter_count": 1,
+
+        "discussion_time": 60,
+
+        "voting_time": 45,
+
+        "hints": True,
+
+        "imposters": set(),
+
+        "votes": {},
+
+        "caught_imposters": [],
+
+        "word": None,
+
+        "hint": None,
+
+        "voice_channel_id": None,
+
+        "lobby_message": None,
+
+        "game_message": None
+    }
+
+    # --------------------------------------------------------
+    # ALLE IM VOICE AUTOMATISCH EINLADEN
+    # --------------------------------------------------------
+
+    for member in source_voice.members:
+
+        if member.bot:
+            continue
+
+        game["players"][
+            str(member.id)
+        ] = {
+
+            "user_id": member.id,
+
+            "accepted": (
+                member.id
+                == interaction.user.id
+            ),
+
+            "original_voice_id": (
+                source_voice.id
+            )
+        }
+
+    IMPOSTER_GAMES[
+        guild.id
+    ] = game
+
+    # --------------------------------------------------------
+    # LOBBY
+    # --------------------------------------------------------
+
+    await interaction.response.send_message(
+        embed=imposter_embed(
+            game
+        ),
+        view=ImposterLobbyView(
+            game
+        )
+    )
+
+    game[
+        "lobby_message"
+    ] = await interaction.original_response()
+
+    # --------------------------------------------------------
+    # DMS
+    # --------------------------------------------------------
+
+    for user_id, player in list(
+        game["players"].items()
+    ):
+
+        if player.get(
+            "accepted"
+        ):
+            continue
+
+        member = guild.get_member(
+            int(user_id)
+        )
+
+        if not member:
+            continue
+
+        try:
+
+            embed = discord.Embed(
+                title="🎭 IMPOSTER-EINLADUNG",
+                description=(
+                    f"**{interaction.user.display_name}** "
+                    "startet eine Runde **Wer ist der Imposter?**\n\n"
+                    "Du bist aktuell im selben Voice-Channel "
+                    "und wurdest zur Runde eingeladen.\n\n"
+                    "Willst du mitspielen?"
+                ),
+                color=discord.Color.blurple()
+            )
+
+            embed.add_field(
+                name="👥 Mindestspieler",
+                value="3",
+                inline=True
+            )
+
+            embed.add_field(
+                name="🎯 Kategorie",
+                value=game["category"],
+                inline=True
+            )
+
+            await member.send(
+                embed=embed,
+                view=ImposterInviteView(
+                    guild.id,
+                    member.id
+                )
+            )
+
+        except discord.Forbidden:
+
+            print(
+                f"[IMPOSTER] DMs deaktiviert: {member}"
+            )
+
+        except Exception as error:
+
+            print(
+                f"[IMPOSTER] Einladung Fehler: "
+                f"{member} | {error!r}"
+            )
+
+    await imposter_update_lobby(
+        game
+    )
 # ============================================================
 # START
 # ============================================================

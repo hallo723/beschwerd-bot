@@ -7973,19 +7973,7 @@ async def imposter(
 
         return
 
-    # --------------------------------------------------------
-    # NUR EIN SPIEL PRO SERVER
-    # --------------------------------------------------------
-
-    if guild.id in IMPOSTER_GAMES:
-
-        await interaction.response.send_message(
-            "❌ Auf diesem Server läuft bereits ein Imposter-Spiel.",
-            ephemeral=True
-        )
-
-        return
-
+    
     # --------------------------------------------------------
     # VOICE CHECK
     # --------------------------------------------------------

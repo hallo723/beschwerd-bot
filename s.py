@@ -7958,9 +7958,6 @@ async def imposter_cleanup(
     name="imposter",
     description="Startet eine Runde Wer ist der Imposter?"
 )
-@app_commands.checks.has_permissions(
-    administrator=True
-)
 async def imposter(
     interaction: discord.Interaction
 ):
